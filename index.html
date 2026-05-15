@@ -8,7 +8,23 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Courier New', monospace; min-height: 100vh; }
     button { font-family: 'Courier New', monospace; }
+    #app { min-width: 900px; }
   </style>
+  <script>
+    function applyScale() {
+      const minWidth = 900;
+      const scale = Math.min(1, window.innerWidth / minWidth);
+      const app = document.getElementById('app');
+      if (app) {
+        app.style.transformOrigin = 'top left';
+        app.style.transform = scale < 1 ? `scale(${scale})` : '';
+        app.style.width = scale < 1 ? `${100 / scale}%` : '';
+        document.body.style.height = scale < 1 ? `${app.offsetHeight * scale}px` : '';
+      }
+    }
+    window.addEventListener('resize', applyScale);
+    window.addEventListener('load', applyScale);
+  </script>
 </head>
 <body>
 <div id="app"></div>
