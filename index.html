@@ -4,10 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>カメラ メンテナンス ウインドウ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Noto+Sans+JP:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Courier New', monospace; min-height: 100vh; }
-    button { font-family: 'Courier New', monospace; }
+    body { font-family: 'DM Mono', 'Noto Sans JP', monospace; min-height: 100vh; }
+    button { font-family: 'DM Mono', 'Noto Sans JP', monospace; }
     #app { min-width: 900px; }
   </style>
   <script>
@@ -170,12 +173,12 @@ function BaseballDiagram({ cameras, t, height }) {
         const color = camColor(id);
         const sLabel = camStatusLabel(id);
         return h("g", { key: id },
-          h("text", { x, y: y-24, textAnchor: "middle", fill: t.camLabelColor, fontSize: "14", fontFamily: "Courier New, monospace", fontWeight: "bold" }, label),
+          h("text", { x, y: y-24, textAnchor: "middle", fill: t.camLabelColor, fontSize: "14", fontFamily: "'DM Mono', 'Noto Sans JP', monospace", fontWeight: "bold" }, label),
           h("circle", { cx: x, cy: y, r: "14", fill: t.camBg, stroke: color, strokeWidth: "2" }),
           h("rect", { x: x-6, y: y-5, width: "9", height: "10", rx: "2", fill: color }),
           h("polygon", { points: `${x+3},${y-4} ${x+9},${y-6} ${x+9},${y+6} ${x+3},${y+4}`, fill: color }),
           h("circle", { cx: x-2, cy: y, r: "3", fill: t.camBg }),
-          h("text", { x, y: y+28, textAnchor: "middle", fill: color, fontSize: "13", fontFamily: "Courier New, monospace", fontWeight: "bold" }, sLabel),
+          h("text", { x, y: y+28, textAnchor: "middle", fill: color, fontSize: "13", fontFamily: "'DM Mono', 'Noto Sans JP', monospace", fontWeight: "bold" }, sLabel),
         );
       })
     )
@@ -373,7 +376,7 @@ function App() {
   ];
 
   return h("div", {
-    style: { minHeight: "100vh", background: t.appBg, display: "flex", flexDirection: "column", fontFamily: "'Courier New', monospace", color: t.appColor, transition: "background 0.3s" }
+    style: { minHeight: "100vh", background: t.appBg, display: "flex", flexDirection: "column", fontFamily: "'DM Mono', 'Noto Sans JP', monospace", color: t.appColor, transition: "background 0.3s" }
   },
     h("div", { style: { padding: "12px 32px", background: t.headerBg, borderBottom: `2px solid ${t.headerBorder}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between" } },
       h("div", { style: { fontSize: "10px", fontWeight: 700, color: t.headerTitle, letterSpacing: "3px", border: `1px solid ${t.headerBorder}`, borderRadius: "4px", padding: "4px 10px" } }, "カメラ メンテナンス ウインドウ"),
