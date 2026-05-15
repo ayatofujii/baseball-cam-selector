@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>カメラ メンテナンス ウインドウ</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Courier New', monospace; min-height: 100vh; }
+    button { font-family: 'Courier New', monospace; }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script>
+const { useState, useRef, useEffect } = React;
+const h = React.createElement;
+
+const CAMERAS = [1, 2, 3, 4];
+
+const THEMES = {
+  dark: {
+    appBg: "#070710", appColor: "#ccc",
+    headerBg: "#1a1a1a", headerBorder: "#444444", headerTitle: "#ffffff", headerSub: "#888",
+    cardBg: "#0d0d1a", toggleBg: "#222222", toggleBorder: "#555555",
+    legendColor: "#aaaaaa", dividerColor: "#444455", footerBg: "#1a1a1a",
+    bannerText: "#ffffff", hintColor: "#eeee00", bannerShadow: "active",
+    undoActiveBg: "#ffffff15", undoActiveBorder: "#ffffff50", undoActiveColor: "#cccccc",
+    undoInactiveBorder: "#444444", undoInactiveColor: "#666666",
+    shadowAuto: "0 0 20px rgba(0,229,160,0.1)", shadowMaint: "0 0 20px rgba(255,77,77,0.2)",
+    shadowFixed: "0 0 20px rgba(0,207,255,0.2)", shadowStandby: "0 0 20px rgba(155,89,182,0.15)",
+    diamondFill: "#1a1208", diamondStroke: "#8a6a30",
+    moundFill: "#2a1a08", moundStroke: "#8a6a30",
+    baseFill: "#ffffff", baseStroke: "none", camBg: "#0d0d1a", camLabelColor: "#ffffff",
+    colorAuto: "#00e5a0", colorMaint: "#ff4d4d", colorFixed: "#00cfff", colorStandby: "#9b59b6",
+    btnBgAuto: null, btnBgMaint: null, btnBgFixed: null, btnBgStandby: null,
+    statusNormalColor: "#00e5a0", statusNormalBg: "rgba(0,229,160,0.05)", statusNormalBorder: "#00e5a0",
+    statusFixedColor: "#00cfff", statusFixedBg: "rgba(0,207,255,0.05)", statusFixedBorder: "#00cfff",
+    releaseBorderDisabled: "#666666", releaseColorDisabled: "#888888",
+    tooltipBg: "#1a1a2e", tooltipBorder: "#ff4d4d", tooltipColor: "#ff9999",
+  },
+  light: {
+    appBg: "#e8e8e8", appColor: "#222",
+    headerBg: "#f0f0f0", headerBorder: "#aaaaaa", headerTitle: "#111111", headerSub: "#888",
+    cardBg: "#f0f0f0", toggleBg: "#dddde8", toggleBorder: "#bbbbcc",
+    legendColor: "#555555", dividerColor: "#aaaaaa", footerBg: "#f0f0f0",
+    bannerText: "#111111", hintColor: "#111111", bannerShadow: "none",
+    undoActiveBg: "#00000015", undoActiveBorder: "#00000050", undoActiveColor: "#333333",
+    undoInactiveBorder: "#cccccc", undoInactiveColor: "#aaaaaa",
+    shadowAuto: "none", shadowMaint: "none",
+    shadowFixed: "none", shadowStandby: "none",
+    diamondFill: "#ddd8c8", diamondStroke: "#8a7040",
+    moundFill: "#ddd8c8", moundStroke: "#8a7040",
+    baseFill: "#ffffff", baseStroke: "#555555", camBg: "#e8e8e8", camLabelColor: "#111111",
+    colorAuto: "#008855", colorMaint: "#cc0000", colorFixed: "#0088cc", colorStandby: "#660088",
+    btnBgAuto: "#c8f5e5", btnBgMaint: "#ffd5d5", btnBgFixed: "#c5eeff", btnBgStandby: "#e8d0f5",
+    statusNormalColor: "#008855", statusNormalBg: "#f0f0f0", statusNormalBorder: "#008855",
+    statusFixedColor: "#0088cc", statusFixedBg: "#f0f0f0", statusFixedBorder: "#0088cc",
+    releaseBorderDisabled: "#cccccc", releaseColorDisabled: "#aaaaaa",
+    tooltipBg: "#fff0f0", tooltipBorder: "#cc0000", tooltipColor: "#880000",
+  }
+};
+
+const initialCameras = () =>
+  CAMERAS.reduce((acc, id) => { acc[id] = { mode: "AUTO" }; return acc; }, {});
+
+function getSystemMode(cameras) {
+  const modes = Object.values(cameras).map(c => c.mode);
+  if (modes.includes("FIXED")) return "FIXED";
+  return modes.filter(m => m === "MAINT").length === 0 ? "NORMAL" : "DEGRADED";
+}
+function getActiveCount(cameras) { return Object.values(cameras).filter(c => c.mode === "AUTO").length; }
+function getMaintCount(cameras)  { return Object.values(cameras).filter(c => c.mode === "MAINT").length; }
+function canReleaseFixed(cameras){ return getMaintCount(cameras) <= 1; }
+function getBlockingCameras(cameras) {
+  return Object.entries(cameras).filter(([,c]) => c.mode === "MAINT").map(([id]) => `CAM-${id}`).join("・");
+}
+
+function Tooltip({ text, visible, t }) {
+  if (!visible) return null;
+  return h("div", {
+    style: {
+      position: "absolute", bottom: "calc(100% + 8px)", left: "50%",
+      transform: "translateX(-50%)", background: t.tooltipBg,
+      border: `1px solid ${t.tooltipBorder}`, color: t.tooltipColor,
+      fontSize: "11px", padding: "6px 10px", borderRadius: "4px",
+      whiteSpace: "nowrap", zIndex: 100, pointerEvents: "none", lineHeight: 1.5,
+    }
+  },
+    text,
+    h("div", { style: { position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)", borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderTop: `5px solid ${t.tooltipBorder}` } })
+  );
+}
+
+function UndoBar({ hasHistory, onUndo, t }) {
+  return h("button", {
+    onClick: onUndo, disabled: !hasHistory,
+    style: {
+      background: hasHistory ? t.undoActiveBg : "transparent",
+      border: `1px solid ${hasHistory ? t.undoActiveBorder : t.undoInactiveBorder}`,
+      color: hasHistory ? t.undoActiveColor : t.undoInactiveColor,
+      padding: "8px 20px", borderRadius: "6px",
+      cursor: hasHistory ? "pointer" : "default",
+      fontSize: "12px", letterSpacing: "1px", transition: "all 0.2s",
+    },
+    onMouseEnter: e => { if (hasHistory) e.target.style.opacity = "0.8"; },
+    onMouseLeave: e => { if (hasHistory) e.target.style.opacity = "1"; },
+  }, "１つ前の設定に戻る");
+}
+
+function BaseballDiagram({ cameras, t, height }) {
+  const camColor = id => {
+    const mode = cameras[id].mode;
+    if (mode === "FIXED")   return t.colorFixed;
+    if (mode === "MAINT")   return t.colorMaint;
+    if (mode === "STANDBY") return t.colorStandby;
+    return t.colorAuto;
+  };
+  const camStatusLabel = id => {
+    const mode = cameras[id].mode;
+    if (mode === "FIXED")   return "固定";
+    if (mode === "MAINT")   return "メンテ";
+    if (mode === "STANDBY") return "待機";
+    return "自動";
+  };
+  const W = 370, H = 370, cx = W / 2;
+  const top    = { x: cx,      y: 95  };
+  const right  = { x: cx + 90, y: 185 };
+  const bottom = { x: cx,      y: 275 };
+  const left   = { x: cx - 90, y: 185 };
+  const mound  = { x: cx,      y: 185 };
+  const diamond = `${top.x},${top.y} ${right.x},${right.y} ${bottom.x},${bottom.y} ${left.x},${left.y}`;
+  const cams = [
+    { id: 1, x: cx,       y: 48,  label: "CAM-1" },
+    { id: 2, x: cx,       y: 325, label: "CAM-2" },
+    { id: 3, x: cx + 122, y: 185, label: "CAM-3" },
+    { id: 4, x: cx - 122, y: 185, label: "CAM-4" },
+  ];
+  return h("div", { style: { flex: 1, display: "flex", alignItems: "flex-start", justifyContent: "center" } },
+    h("svg", { viewBox: `0 0 ${W} ${H}`, height: height || undefined, width: height ? "auto" : "100%", preserveAspectRatio: "xMidYMin meet", style: { display: "block" } },
+      h("polygon", { points: diamond, fill: t.diamondFill, stroke: t.diamondStroke, strokeWidth: "1.5" }),
+      h("circle", { cx: mound.x, cy: mound.y, r: "8", fill: t.moundFill, stroke: t.moundStroke, strokeWidth: "1" }),
+      ...[top, right, bottom, left].map((pt, i) =>
+        h("rect", { key: i, x: pt.x-5, y: pt.y-5, width: "10", height: "10", fill: t.baseFill, stroke: t.baseStroke, strokeWidth: "1", opacity: "0.9", transform: `rotate(45 ${pt.x} ${pt.y})` })
+      ),
+      h("polygon", {
+        points: `${bottom.x},${bottom.y+11} ${bottom.x+10},${bottom.y+2} ${bottom.x+10},${bottom.y-8} ${bottom.x-10},${bottom.y-8} ${bottom.x-10},${bottom.y+2}`,
+        fill: t.baseFill, stroke: t.baseStroke, strokeWidth: "1", opacity: "0.9"
+      }),
+      ...cams.map(({ id, x, y, label }) => {
+        const color = camColor(id);
+        const sLabel = camStatusLabel(id);
+        return h("g", { key: id },
+          h("text", { x, y: y-24, textAnchor: "middle", fill: t.camLabelColor, fontSize: "14", fontFamily: "Courier New, monospace", fontWeight: "bold" }, label),
+          h("circle", { cx: x, cy: y, r: "14", fill: t.camBg, stroke: color, strokeWidth: "2" }),
+          h("rect", { x: x-6, y: y-5, width: "9", height: "10", rx: "2", fill: color }),
+          h("polygon", { points: `${x+3},${y-4} ${x+9},${y-6} ${x+9},${y+6} ${x+3},${y+4}`, fill: color }),
+          h("circle", { cx: x-2, cy: y, r: "3", fill: t.camBg }),
+          h("text", { x, y: y+28, textAnchor: "middle", fill: color, fontSize: "13", fontFamily: "Courier New, monospace", fontWeight: "bold" }, sLabel),
+        );
+      })
+    )
+  );
+}
+
+function CameraCard({ id, mode, systemMode, cameras, onToggleMaint, onSetFixed, onReleaseFixed, t }) {
+  const [tooltipVisible, setTooltipVisible] = useState(false);
+  const canRelease = canReleaseFixed(cameras);
+  const blockingCams = getBlockingCameras(cameras);
+  const showFixedButton   = mode === "AUTO" || mode === "STANDBY";
+  const showReleaseButton = mode === "FIXED" && getMaintCount(cameras) <= 1;
+  const isMaintToggleDisabled = mode === "FIXED" || (systemMode === "FIXED" && mode === "STANDBY");
+  const isReleaseDisabled = !canRelease;
+  const modeColor = mode === "FIXED" ? t.colorFixed : mode === "MAINT" ? t.colorMaint : mode === "STANDBY" ? t.colorStandby : t.colorAuto;
+  const modeLabel = mode === "FIXED" ? "固定カメラ" : mode === "MAINT" ? "メンテナンス中" : mode === "STANDBY" ? "待機カメラ" : "自動カメラ";
+  const cardShadow = mode === "FIXED" ? t.shadowFixed : mode === "MAINT" ? t.shadowMaint : mode === "STANDBY" ? t.shadowStandby : t.shadowAuto;
+  const fixedBtnColor = mode === "STANDBY" ? t.colorStandby : t.colorFixed;
+
+  return h("div", {
+    style: {
+      background: t.cardBg, border: `2px solid ${modeColor}`,
+      borderRadius: "12px", padding: "14px 20px",
+      display: "flex", flexDirection: "column", gap: "10px",
+      transition: "border-color 0.3s, box-shadow 0.3s", boxShadow: cardShadow,
+    }
+  },
+    // 上段：CAM名＋ステータス
+    h("div", { style: { fontSize: "20px", letterSpacing: "4px", color: t.headerTitle, fontWeight: 700 } },
+      `CAM-${id}`,
+      h("span", { style: { marginLeft: "12px", fontSize: "18px", fontWeight: 700, letterSpacing: "2px", color: modeColor, transition: "color 0.3s" } }, modeLabel)
+    ),
+    // 下段：左にトグル、右に固定ボタン
+    h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" } },
+      // 左：自動／メンテナンストグル
+      h("div", {
+        style: {
+          display: "flex", background: t.toggleBg, border: `1px solid ${t.toggleBorder}`,
+          borderRadius: "6px", overflow: "hidden",
+          opacity: isMaintToggleDisabled ? 0.2 : 1,
+          pointerEvents: isMaintToggleDisabled ? "none" : "auto", transition: "opacity 0.2s",
+        }
+      },
+        ...["AUTO", "MAINT"].map(m => {
+          const isActive = mode === m;
+          const activeColor = m === "AUTO" ? t.colorAuto : t.colorMaint;
+          return h("button", {
+            key: m, onClick: () => onToggleMaint(id, m), disabled: isMaintToggleDisabled,
+            style: {
+              padding: "6px 16px",
+              background: isActive ? (m === "AUTO" ? (t.btnBgAuto || `${activeColor}20`) : (t.btnBgMaint || `${activeColor}20`)) : "transparent",
+              border: isActive ? `2px solid ${activeColor}` : "2px solid transparent",
+              borderRadius: "4px", color: m === "AUTO" ? t.colorAuto : t.colorMaint,
+              fontSize: "11px", fontWeight: isActive ? 700 : 400, letterSpacing: "1px",
+              cursor: isActive ? "default" : "pointer",
+              transition: "all 0.2s", margin: "2px", whiteSpace: "nowrap",
+            }
+          }, m === "AUTO" ? "自動カメラ" : "メンテナンス");
+        })
+      ),
+      // 右：固定ボタン
+      h("div", null,
+        mode === "FIXED" && getMaintCount(cameras) >= 2 && h("button", {
+          disabled: true,
+          style: {
+            padding: "7px 16px", background: "transparent",
+            border: `2px solid ${t.releaseBorderDisabled}`,
+            borderRadius: "6px", color: t.releaseColorDisabled,
+            fontSize: "11px", fontWeight: 700, letterSpacing: "1px",
+            cursor: "default", whiteSpace: "nowrap", minWidth: "130px",
+          }
+        }, "カメラ固定中"),
+        showFixedButton && h("button", {
+          onClick: () => onSetFixed(id),
+          style: {
+            padding: "7px 16px", background: mode === "STANDBY" ? (t.btnBgStandby || `${fixedBtnColor}15`) : (t.btnBgFixed || `${fixedBtnColor}15`),
+            border: `2px solid ${fixedBtnColor}`,
+            borderRadius: "6px", color: fixedBtnColor,
+            fontSize: "11px", fontWeight: 700, letterSpacing: "1px",
+            cursor: "pointer", transition: "all 0.2s", whiteSpace: "nowrap", minWidth: "130px",
+          },
+          onMouseEnter: e => { e.target.style.opacity = "0.75"; },
+          onMouseLeave: e => { e.target.style.opacity = "1"; },
+        }, "このカメラで固定"),
+        showReleaseButton && h("div", {
+          style: { position: "relative" },
+          onMouseEnter: () => isReleaseDisabled && setTooltipVisible(true),
+          onMouseLeave: () => setTooltipVisible(false),
+        },
+          h(Tooltip, { visible: tooltipVisible, text: `${blockingCams} をAUTOに戻すと解除できます`, t }),
+          h("button", {
+            onClick: () => !isReleaseDisabled && onReleaseFixed(), disabled: isReleaseDisabled,
+            style: {
+              padding: "7px 16px",
+              background: isReleaseDisabled ? "transparent" : (t.btnBgFixed || `${t.colorFixed}15`),
+              border: `2px solid ${isReleaseDisabled ? t.releaseBorderDisabled : t.colorFixed + "50"}`,
+              borderRadius: "6px",
+              color: isReleaseDisabled ? t.releaseColorDisabled : t.colorFixed,
+              fontSize: "11px", fontWeight: 700, letterSpacing: "1px",
+              cursor: isReleaseDisabled ? "not-allowed" : "pointer",
+              transition: "all 0.2s", whiteSpace: "nowrap",
+            }
+          }, "カメラ固定を解除")
+        )
+      )
+    )
+  );
+}
+
+function App() {
+  const [cameras,   setCameras]   = useState(initialCameras());
+  const [undoStack, setUndoStack] = useState(null);
+  const [theme,     setTheme]     = useState("dark");
+  const cardListRef = useRef(null);
+  const [cardListHeight, setCardListHeight] = useState(null);
+
+  useEffect(() => {
+    const update = () => {
+      if (cardListRef.current) setCardListHeight(cardListRef.current.offsetHeight);
+    };
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, [cameras]);
+  const t = THEMES[theme];
+
+  const systemMode  = getSystemMode(cameras);
+  const activeCount = getActiveCount(cameras);
+  const maintCount  = getMaintCount(cameras);
+  const fixedCam    = Object.entries(cameras).find(([,c]) => c.mode === "FIXED")?.[0];
+
+  const sysConfig = {
+    color:  systemMode === "FIXED" ? t.statusFixedColor  : t.statusNormalColor,
+    bg:     systemMode === "FIXED" ? t.statusFixedBg     : t.statusNormalBg,
+    border: systemMode === "FIXED" ? t.statusFixedBorder : t.statusNormalBorder,
+    label:  systemMode === "FIXED" ? "固定カメラモード"  : "自動カメラモード",
+  };
+
+  const pushUndo = prev => setUndoStack({ prev });
+
+  const handleToggleMaint = (id, targetMode) => {
+    const cur = cameras[id].mode;
+    if (cur === targetMode || (cur === "STANDBY" && targetMode === "AUTO")) return;
+    const prev = { ...cameras };
+    setCameras(c => {
+      const u = { ...c, [id]: { mode: targetMode } };
+      const mc = Object.values(u).filter(x => x.mode === "MAINT").length;
+      const hf = Object.values(u).some(x => x.mode === "FIXED");
+      if (mc >= 2 && !hf) {
+        const ak = Object.keys(u).filter(k => u[k].mode === "AUTO").sort((a,b) => Number(a)-Number(b));
+        for (const k of Object.keys(u)) if (u[k].mode === "AUTO") u[k] = { mode: k === ak[0] ? "FIXED" : "STANDBY" };
+      }
+      if (mc <= 1 && !hf) for (const k of Object.keys(u)) if (u[k].mode === "STANDBY") u[k] = { mode: "AUTO" };
+      if (mc <= 1 &&  hf) for (const k of Object.keys(u)) if (u[k].mode === "FIXED" || u[k].mode === "STANDBY") u[k] = { mode: "AUTO" };
+      return u;
+    });
+    pushUndo(prev);
+  };
+
+  const handleSetFixed = id => {
+    const prev = { ...cameras };
+    setCameras(c => {
+      const n = {};
+      for (const [k,v] of Object.entries(c))
+        n[k] = Number(k) === id ? { mode: "FIXED" } : (v.mode === "FIXED" || v.mode === "AUTO" || v.mode === "STANDBY") ? { mode: "STANDBY" } : { ...v };
+      return n;
+    });
+    pushUndo(prev);
+  };
+
+  const handleReleaseFixed = () => {
+    const prev = { ...cameras };
+    setCameras(c => {
+      const n = {};
+      for (const [k,v] of Object.entries(c)) n[k] = (v.mode === "FIXED" || v.mode === "STANDBY") ? { mode: "AUTO" } : { ...v };
+      return n;
+    });
+    pushUndo(prev);
+  };
+
+  const handleUndo = () => { if (undoStack) { setCameras(undoStack.prev); setUndoStack(null); } };
+
+  const systemSub = () => {
+    if (systemMode === "NORMAL")   return "4台のカメラで運用中";
+    if (systemMode === "DEGRADED") return `${activeCount}台のカメラで運用中 ／ ${maintCount}台メンテナンス中`;
+    if (systemMode === "FIXED")    return `CAM-${fixedCam}で固定中${maintCount > 0 ? ` ／ ${maintCount}台メンテナンス中` : ""}`;
+    return "";
+  };
+
+  const LEGEND = [
+    { label: "自動カメラ",     color: t.colorAuto    },
+    { label: "メンテナンス中", color: t.colorMaint   },
+    { label: "固定カメラ",     color: t.colorFixed   },
+    { label: "待機カメラ",     color: t.colorStandby },
+  ];
+
+  return h("div", {
+    style: { minHeight: "100vh", background: t.appBg, display: "flex", flexDirection: "column", fontFamily: "'Courier New', monospace", color: t.appColor, transition: "background 0.3s" }
+  },
+    h("div", { style: { padding: "12px 32px", background: t.headerBg, borderBottom: `2px solid ${t.headerBorder}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between" } },
+      h("div", { style: { fontSize: "10px", fontWeight: 700, color: t.headerTitle, letterSpacing: "3px", border: `1px solid ${t.headerBorder}`, borderRadius: "4px", padding: "4px 10px" } }, "カメラ メンテナンス ウインドウ"),
+      h("div", { style: { display: "flex", alignItems: "center", gap: "12px" } },
+        h("button", {
+          onClick: () => setTheme(theme === "dark" ? "light" : "dark"),
+          style: {
+            padding: "4px 14px", borderRadius: "20px", fontSize: "11px",
+            fontWeight: 700, letterSpacing: "1px", cursor: "pointer", transition: "all 0.3s",
+            background: theme === "dark" ? "#ffffff20" : "#00000015",
+            border: `1px solid ${theme === "dark" ? "#ffffff40" : "#00000030"}`,
+            color: theme === "dark" ? "#ffffff" : "#333333",
+          }
+        }, theme === "dark" ? "☀ ライトテーマへ変更" : "☾ ダークテーマへ変更"),
+        h("div", { style: { fontSize: "10px", color: t.headerSub, letterSpacing: "2px" } }, "v1.0")
+      )
+    ),
+    h("div", {
+      style: {
+        margin: "16px 32px 0", background: sysConfig.bg,
+        border: `2px solid ${sysConfig.border}`, borderRadius: "8px",
+        padding: "14px 20px", display: "flex", alignItems: "center",
+        transition: "all 0.4s", boxShadow: t.bannerShadow === "none" ? "none" : `0 0 16px ${sysConfig.border}30`,
+      }
+    },
+      h("div", { style: { display: "flex", alignItems: "baseline", gap: "14px", flex: 1 } },
+        h("span", { style: { fontSize: "20px", fontWeight: 700, letterSpacing: "3px", color: sysConfig.color } }, sysConfig.label),
+        h("span", { style: { fontSize: "20px", color: t.bannerText, letterSpacing: "1px", marginLeft: "auto", fontWeight: 700 } }, systemSub())
+      )
+    ),
+    h("div", { style: { display: "flex", padding: "24px 32px 0", gap: "24px", alignItems: "flex-start" } },
+      h("div", { ref: cardListRef, style: { display: "flex", flexDirection: "column", gap: "12px", flex: "0 0 50%" } },
+        ...CAMERAS.map(id => h(CameraCard, {
+          key: id, id, mode: cameras[id].mode, systemMode, cameras, t,
+          onToggleMaint: handleToggleMaint, onSetFixed: handleSetFixed, onReleaseFixed: handleReleaseFixed,
+        }))
+      ),
+      h(BaseballDiagram, { cameras, t, height: cardListHeight })
+    ),
+    h("div", {
+      style: { fontSize: "15px", color: t.hintColor, letterSpacing: "1px", padding: "8px 32px 0", textAlign: "center", minHeight: "32px" }
+    }, systemMode === "FIXED" && !canReleaseFixed(cameras) ? "メンテナンス中のカメラを自動カメラに戻すと、固定カメラモードを解除できます" : ""),
+    h("div", {
+      style: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "12px 32px 16px", background: t.footerBg, borderTop: `2px solid ${t.dividerColor}`, flex: 1 }
+    },
+      h("div", { style: { display: "flex", gap: "16px", alignItems: "center", flexWrap: "wrap" } },
+        ...LEGEND.map(({ label, color }) =>
+          h("div", { key: label, style: { display: "flex", alignItems: "center", gap: "6px" } },
+            h("div", { style: { width: "8px", height: "8px", borderRadius: "50%", background: color } }),
+            h("span", { style: { fontSize: "13px", color: t.legendColor, letterSpacing: "2px" } }, label)
+          )
+        )
+      ),
+      h(UndoBar, { hasHistory: !!undoStack, onUndo: handleUndo, t })
+    )
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("app")).render(h(App));
+</script>
+</body>
+</html>
